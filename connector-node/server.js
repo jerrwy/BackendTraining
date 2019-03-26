@@ -3,7 +3,11 @@ var connections, count, net, port, responseData, server
 
 net = require("net")
 var Message = require("./message")
-responseData = [0, 1, 2, 3].map(()=>"0123456789").join("")
+var Push = require('./push')
+var State = require('./state')
+var User = require('./user')
+var Util = require('./util')
+// responseData = [0, 1, 2, 3].map(()=>"0123456789").join("")
 
 connections = {}
 
@@ -11,34 +15,62 @@ count = 0
 
 server = net.createServer((c)=>{
   c.id = count++
-  connections[c.id] = true
+  connections[c.id] = c
   c.on("end", ()=>{
     if (connections[c.id]) delete connections[c.id]
-
-    console.log("connection end" + c.id)
+    console.log("connection end connectId:" + c.id)
   })
 
   c.on("error", (err)=>{
     if (connections[c.id]) delete connections[c.id]
     console.log(err, c.id)
-
   })
 
   c.on("data", (chunk)=>{
-    var handletype, type
     var message = Message.ReadMessage(chunk)
+    console.log('rev:', JSON.stringify(message))
     switch (message.cmd) {
       case Message.Type.HB:
-        console.log(message)
+        console.log(`心跳消息: ${message.content}`)
+        c.write(message.toChunk())
+        return
+      case Message.Type.Login:
+        const {username} = JSON.parse(message.content)
+        console.log(`用户 [${username}] 登录`)
+        const res = User.login(username)
+        //登录成功
+        if(res) {
+          console.log(`用户 [${username}] 登录成功!`)
+          //注册state
+          State.registerState({
+            serverIp: Util.getIP(),
+            connectId: c.id,
+            username
+          })
+          State.logState()
+          c.write(message.toChunk())
+        }
         return
 
       case Message.Type.NewMsg:
-        console.log(message)
-        setTimeout(()=>{
-          message.content += "hoho!!"
-          c.write(message.toChunk())
-        }, Math.random() * 100)
-        return
+        let push = JSON.parse(message.content)
+        let state = State.checkConnectState(c.id)
+        //用户未登录
+        if(!state) { return }
+        //数据异常
+        if(state.username !== push.from) { return }
+        //推送消息持久化
+        let msg = Push.save2db(push)
+        // Push.logPushHistory()
+        let toState = State.checkUserState(push.to)
+        //推送的用户在线
+        if(toState) {
+          console.log(`用户 [${push.to}] 在线, 推送消息`)
+          message.content = JSON.stringify(msg)
+          connections[toState.connectId].write(message.toChunk())
+        } else {
+          console.log(`用户 [${push.to}] 不在线`)
+        }
     }
   })
 })
@@ -50,6 +82,6 @@ server.listen(port, ()=>{
   process.stdin.resume()
 })
 
-setInterval(()=>{
-  console.log("count:" + (Object.keys(connections).length) + ", \ntime:" + (new Date()))
-}, 2000)
+// setInterval(()=>{
+//   console.log("count:" + (Object.keys(connections).length) + ", \ntime:" + (new Date()))
+// }, 2000)

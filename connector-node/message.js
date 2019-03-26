@@ -4,7 +4,7 @@
 		cmd: uint16
 		length: uint16
 		content: by length
-	
+
 	cmd type:
 		10001 heartbeat
 
@@ -17,25 +17,25 @@
 		12002 拉去数据信息
 			数据：{username: "superwolf", lastMessageId: 1234}
 
-		
+
 		21001 被踢
 			数据: {content: "有其他用户使用你的身份登录！！"}
 
 		20001 推送数据
 			数据：{from: "superwolf", to: "superwolf2", type: 2, content: "好hi哦！！", datetime: 1553160592899}
 
-	
+
 	所有10000-20000之间的cmd都是客户端向服务端的请求，20000-30000的数据是服务器端向客户端推送
 	客户端请求数据，服务端返回结果的时候要严格保证seq和cmd是不变的
 */
 
 class Message {
 	constructor(){
-		
+
 	}
 	toChunk(){
 		const contentBuf = Buffer.from(this.content, 'utf8')
-		const buf = new Buffer(6 + contentBuf.length);
+		const buf = Buffer.alloc(6 + contentBuf.length);
 
 		buf.writeInt16BE(this.seq)
 		buf.writeInt16BE(this.cmd, 2)
